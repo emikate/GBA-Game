@@ -354,7 +354,7 @@ void koopa_init(struct Koopa* koopa) {
     koopa->move = 0;
     koopa->counter = 0;
     koopa->animation_delay = 8;
-    koopa->sprite = sprite_init(koopa->x, koopa->y, SIZE_64_64, 0, 0, koopa->frame, 0);
+    koopa->sprite = sprite_init(koopa->x, koopa->y, SIZE_32_32, 0, 0, koopa->frame, 0);
 }
 
 /* move the koopa left or right returns if it is at edge of the screen */

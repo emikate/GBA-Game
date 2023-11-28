@@ -1,33 +1,32 @@
+
 /*
- * sprites.c
- * program which demonstrates GBA sprites
+ * game.c
+ * simple catcher game for the GBA
  */
 
 #define SCREEN_WIDTH 240
 #define SCREEN_HEIGHT 160
 
-/* include the background image we are using */
-#include "background.h"
-
-/* include the sprite image we are using */
+/* include these files */
+#include "parallax-mountain-bg.h"
 #include "bowl2.h"
-
-
-/* include the tile map we are using */
 #include "map.h"
 
 /* the tile mode flags needed for display control register */
 #define MODE0 0x00
+#define MODE1 0x00
+#define MODE4 0x0400
 #define BG0_ENABLE 0x100
+#define BG1_ENABLE 0x200
+
+//control registers for tile layers
+volatile unsigned short* bg0_control = (volatile unsigned short*) 0x4000008;
+volatile unsigned short* bg1_control = (volatile     unsigned short*) 0x400000a;
 
 /* flags to set sprite handling in display control register */
 #define SPRITE_MAP_2D 0x0
 #define SPRITE_MAP_1D 0x40
 #define SPRITE_ENABLE 0x1000
-
-
-/* the control registers for the four tile layers */
-volatile unsigned short* bg0_control = (volatile unsigned short*) 0x4000008;
 
 /* palette is always 256 colors */
 #define PALETTE_SIZE 256
@@ -37,6 +36,12 @@ volatile unsigned short* bg0_control = (volatile unsigned short*) 0x4000008;
 
 /* the display control pointer points to the gba graphics register */
 volatile unsigned long* display_control = (volatile unsigned long*) 0x4000000;
+#define SHOW_BACK
+
+/*  pointer points to 16-bit colors of which there are 240x160 */
+ volatile unsigned short* screen = (volatile unsigned short*) 0x6000000;
+volatile unsigned short* front_buffer = (volatile unsigned short*) 0x6000000;
+volatile unsigned short* back_buffer = (volatile unsigned short*)  0x600A000;
 
 /* the memory location which controls sprite attributes */
 volatile unsigned short* sprite_attribute_memory = (volatile unsigned short*) 0x7000000;
@@ -45,18 +50,29 @@ volatile unsigned short* sprite_attribute_memory = (volatile unsigned short*) 0x
 volatile unsigned short* sprite_image_memory = (volatile unsigned short*) 0x6010000;
 
 /* the address of the color palettes used for backgrounds and sprites */
-volatile unsigned short* bg_palette = (volatile unsigned short*) 0x5000000;
+volatile unsigned short* background_palette = (volatile unsigned short*) 0x5000000;
 volatile unsigned short* sprite_palette = (volatile unsigned short*) 0x5000200;
+int next_palette_index = 0;
 
 /* the button register holds the bits which indicate whether each button has
  * been pressed - this has got to be volatile as well
  */
 volatile unsigned short* buttons = (volatile unsigned short*) 0x04000130;
+unsigned char button_pressed(unsigned short button) {     /* and the button register with the button constant we want */
+     unsigned short pressed = *buttons & button;
+    /* if this value is zero, then it's not pressed */
+     if (pressed == 0) {
+         return 1;
+     } else {
+         return 0;
+     }
+}
 
 /* scrolling registers for backgrounds */
 volatile short* bg0_x_scroll = (unsigned short*) 0x4000010;
 volatile short* bg0_y_scroll = (unsigned short*) 0x4000012;
-
+volatile short* bg1_x_scroll = (unsigned short*) 0x4000014;
+volatile short* bg1_y_scroll = (unsigned short*) 0x4000016;
 /* the bit positions indicate each button - the first bit is for A, second for
  * B, and so on, each constant below can be ANDED into the register to get the
  * status of any one button */
@@ -79,19 +95,6 @@ volatile unsigned short* scanline_counter = (volatile unsigned short*) 0x4000006
 void wait_vblank() {
     /* wait until all 160 lines have been updated */
     while (*scanline_counter < 160) { }
-}
-
-/* this function checks whether a particular button has been pressed */
-unsigned char button_pressed(unsigned short button) {
-    /* and the button register with the button constant we want */
-    unsigned short pressed = *buttons & button;
-
-    /* if this value is zero, then it's not pressed */
-    if (pressed == 0) {
-        return 1;
-    } else {
-        return 0;
-    }
 }
 
 /* return a pointer to one of the 4 character blocks (0-3) */
@@ -133,11 +136,12 @@ void memcpy16_dma(unsigned short* dest, unsigned short* source, int amount) {
 void setup_background() {
 
     /* load the palette from the image into palette memory*/
-    memcpy16_dma((unsigned short*) bg_palette, (unsigned short*) background_palette, PALETTE_SIZE);
+    memcpy16_dma((unsigned short*) background_palette, (unsigned short*) 
+bg_palette, PALETTE_SIZE);
 
     /* load the image into char block 0 */
-    memcpy16_dma((unsigned short*) char_block(0), (unsigned short*) background_data,
-            (background_width * background_height) / 2);
+    memcpy16_dma((unsigned short*) char_block(0), (unsigned short*) bg_data,
+            (bg_width * bg_height) / 2);
 
     /* set all control the bits in this register */
     *bg0_control = 0 |    /* priority, 0 is highest, 3 is lowest */
@@ -156,6 +160,22 @@ void setup_background() {
 void delay(unsigned int amount) {
     for (int i = 0; i < amount * 10; i++);
 }
+
+ unsigned char add_color(unsigned char r, unsigned char g, unsigned char b) {
+    unsigned short color = b << 10;
+     color += g << 5;
+     color += r;
+
+     /* add the color to the palette */
+     background_palette[next_palette_index] = color;
+
+     /* increment the index */
+     next_palette_index++;
+
+     /* return index of color just added */
+     return next_palette_index - 1;
+}
+
 
 /* a sprite is a moveable image on the screen */
 struct Sprite {

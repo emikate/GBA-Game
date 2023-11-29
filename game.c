@@ -2,6 +2,7 @@
 #include "background.h"
 #include "map.h"
 #include "map2.h"
+#include "bowl2.h"
 
 /* the width and height of the screen */
 #define WIDTH 240

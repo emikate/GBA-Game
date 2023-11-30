@@ -11,6 +11,7 @@
 #include "map.h"
 #include "bg.h"
 #include "objects.h"
+#include <stdlib.h>
 
 /* the tile mode flags needed for display control register */
 #define MODE0 0x00
@@ -366,6 +367,8 @@ struct Bowl {
     int border;
 };
 
+struct Bowl playerBowl;
+
 /* initialize the bowl */
 void bowl_init(struct Bowl* bowl) {
     bowl->x = 100;
@@ -432,6 +435,16 @@ void bowl_update(struct Bowl* bowl) {
     sprite_position(bowl->sprite, bowl->x, bowl->y);
 }
 
+//call before move function to initialize sprites to fall more randomly
+void falling_sprites(struct Sprite *sprite, int x, int y) {
+    sprite->attribute0 = y | (0 << 8) | (0 << 10) | (0 << 12) | (1 << 13) | (0 << 14);
+    sprite->attribute1 = x | (0 << 9) | (0 << 12) | (0 << 13) | (2 << 14); 
+    sprite->attribute2 = 32 | (0 << 10) | (0 << 12);
+
+    int randomOffset = rand() % SCREEN_WIDTH;
+    sprite_position(sprite, randomOffset, y);
+}
+
 //score by hearts (lives)!
 #define NUM_LIVES 5
 struct Sprite *lives[NUM_LIVES];
@@ -483,7 +496,36 @@ void handle_collisions(struct Bowl* bowl) {
     }
 }
 
+enum Gamestate {
+    INTRO,
+    GAME,
+    GAME_OVER 
+};
 
+enum Gamestate gameState = INTRO;
+
+//require graphics/draw text functions -if time permits
+void intro_screen() {
+}
+
+void over_screen() {
+}
+
+void intro_input() {
+    if (button_pressed(BUTTON_START)) {
+        gameState = GAME;
+    }
+}
+void gg_input() {
+    if (button_pressed(BUTTON_START)) {
+    gameState = INTRO;
+    score = 5;
+    total_lives = NUM_LIVES;
+    game_over = 0;
+    bowl_init(&playerBowl);
+    lives_init();
+    }
+}
 
 /* the main function */
 int main() {

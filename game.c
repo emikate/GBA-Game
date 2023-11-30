@@ -453,7 +453,7 @@ int main() {
     struct Sprite *apple = sprite_init(64, 0, SIZE_32_32, 0, 0, 64, 0);
     struct Sprite *star = sprite_init(96, 0, SIZE_32_32, 0, 0, 96, 0);
     struct Sprite *bananas = sprite_init(128, 0, SIZE_32_32, 0, 0, 128, 0);
-
+    struct Sprite *mushroom = sprite_init(160, 0, SIZE_32_32, 0, 0, 160, 0);
     /* set initial scroll to 0 */
     int xscroll = 0;
 
@@ -465,7 +465,8 @@ int main() {
         sprite_move(apple, dx, dy);
         sprite_move(star, dx, dy);
         sprite_move(bananas, dx, dy);  
-        
+        sprite_move(mushroom,dx,dy);        
+
         bowl_update(&playerBowl);
 
         /* now the arrow keys move the bowl */

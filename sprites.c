@@ -8,9 +8,9 @@
 #define SCREEN_HEIGHT 160
 
 /* include these files */
-#include "parallax-mountain-bg.h"
 #include "bowl2.h"
 #include "map.h"
+#include "bg.h"
 
 /* the tile mode flags needed for display control register */
 #define MODE0 0x00

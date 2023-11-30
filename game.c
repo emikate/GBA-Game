@@ -451,7 +451,8 @@ int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
     return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
 }
 
-void live_lost(struct Sprite life) {
+
+void gg(struct Sprite* life) {
     life->attribute0 = SCREEN_HEIGHT;
     life->attribute1 = SCREEN_WIDTH;
 }
@@ -476,8 +477,8 @@ void handle_collisions(struct Bowl* bowl) {
     for (int i=0; i < NUM_LIVES; i++) {
         if (sprite_collide(lives[i], bowl->sprite)) {
             decrease_score();
-            live_lost(lives[i]);
-            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 0, 0, 32*4, 0);
+            gg(lives[i]);
+            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 0, 0, 32*3, 0);
         }
     }
 }

@@ -1,4 +1,3 @@
-
 /*
  * game.c
  * simple catcher game for the GBA
@@ -12,6 +11,7 @@
 #include "bg.h"
 #include "objects.h"
 #include <stdlib.h>
+#include <time.h>
 
 /* the tile mode flags needed for display control register */
 #define MODE0 0x00
@@ -37,8 +37,6 @@ volatile unsigned short* bg1_control = (volatile     unsigned short*) 0x400000a;
 
 /* the display control pointer points to the gba graphics register */
 volatile unsigned long* display_control = (volatile unsigned long*) 0x4000000;
-
-#define SHOW_BACK 64
 
 /*  pointer points to 16-bit colors of which there are 240x160 */
  volatile unsigned short* screen = (volatile unsigned short*) 0x6000000;
@@ -208,7 +206,8 @@ enum SpriteSize {
 };
 
 /* function to initialize a sprite with its properties, and return a pointer */
-struct Sprite* sprite_init(int x, int y, enum SpriteSize size, int tile_index, int priority) {
+struct Sprite* sprite_init(int x, int y, enum SpriteSize size,
+        int horizontal_flip, int vertical_flip, int tile_index, int priority) {
 
     /* grab the next index */
     int index = next_sprite_index++;
@@ -230,6 +229,9 @@ struct Sprite* sprite_init(int x, int y, enum SpriteSize size, int tile_index, i
         case SIZE_32_64: size_bits = 3; shape_bits = 2; break;
     }
 
+    int h = horizontal_flip ? 1 : 0;
+    int v = vertical_flip ? 1 : 0;
+
     /* set up the first attribute */
     sprites[index].attribute0 = y |             /* y coordinate */
                             (0 << 8) |          /* rendering mode */
@@ -241,6 +243,8 @@ struct Sprite* sprite_init(int x, int y, enum SpriteSize size, int tile_index, i
     /* set up the second attribute */
     sprites[index].attribute1 = x |             /* x coordinate */
                             (0 << 9) |          /* affine flag */
+                            (h << 12) |         /* horizontal flip flag */
+                            (v << 13) |         /* vertical flip flag */
                             (size_bits << 14);  /* size */
 
     /* setup the second attribute */
@@ -297,6 +301,28 @@ void sprite_move(struct Sprite* sprite, int dx, int dy) {
     sprite_position(sprite, x + dx, y + dy);
 }
 
+/* change the vertical flip flag */
+void sprite_set_vertical_flip(struct Sprite* sprite, int vertical_flip) {
+    if (vertical_flip) {
+        /* set the bit */
+        sprite->attribute1 |= 0x2000;
+    } else {
+        /* clear the bit */
+        sprite->attribute1 &= 0xdfff;
+    }
+}
+
+/* change the vertical flip flag */
+void sprite_set_horizontal_flip(struct Sprite* sprite, int horizontal_flip) {
+    if (horizontal_flip) {
+        /* set the bit */
+        sprite->attribute1 |= 0x1000;
+    } else {
+        /* clear the bit */
+        sprite->attribute1 &= 0xefff;
+    }
+}
+
 /* change the tile offset of a sprite */
 void sprite_set_offset(struct Sprite* sprite, int offset) {
     /* clear the old offset */
@@ -326,6 +352,12 @@ struct Bowl {
     /* which frame of the animation he is on */
     int frame;
 
+    /* the number of frames to wait before flipping */
+    int animation_delay;
+
+    /* the animation counter counts how many frames until we flip */
+    int counter;
+
     /* whether the bowl is moving right now or not */
     int move;
 
@@ -342,11 +374,15 @@ void bowl_init(struct Bowl* bowl) {
     bowl->border = 40;
     bowl->frame = 0;
     bowl->move = 0;
-    bowl->sprite = sprite_init(bowl->x, bowl->y, SIZE_32_32, bowl->frame, 0);
+    bowl->counter = 0;
+    bowl->animation_delay = 8;
+    bowl->sprite = sprite_init(bowl->x, bowl->y, SIZE_32_32, 0, 0, bowl->frame, 0);
 }
 
 /* move the bowl left or right returns if it is at edge of the screen */
 int bowl_left(struct Bowl* bowl) {
+    /* face left */
+    sprite_set_horizontal_flip(bowl->sprite, 1);
     bowl->move = 1;
 
     /* if we are at the left end, just scroll the screen */
@@ -359,6 +395,8 @@ int bowl_left(struct Bowl* bowl) {
     }
 }
 int bowl_right(struct Bowl* bowl) {
+    /* face right */
+    sprite_set_horizontal_flip(bowl->sprite, 0);
     bowl->move = 1;
 
     /* if we are at the right end, just scroll the screen */
@@ -374,24 +412,39 @@ int bowl_right(struct Bowl* bowl) {
 void bowl_stop(struct Bowl* bowl) {
     bowl->move = 0;
     bowl->frame = 0;
+    bowl->counter = 7;
     //sprite_set_offset(bowl->sprite, bowl->frame);
 }
 
 /* update the bowl */
 void bowl_update(struct Bowl* bowl) {
+    if (bowl->move) {
+        bowl->counter++;
+        if (bowl->counter >= bowl->animation_delay) {
+            bowl->frame = bowl->frame + 16;
+            if (bowl->frame > 16) {
+                bowl->frame = 0;
+            }
+            //sprite_set_offset(bowl->sprite, bowl->frame);
+            bowl->counter = 0;
+        }
+    }
 
     sprite_position(bowl->sprite, bowl->x, bowl->y);
 }
 
-//call before move function to initialize sprites to fall more randomly
-void falling_sprites(struct Sprite *sprite, int x, int y) {
-    sprite->attribute0 = y | (0 << 8) | (0 << 10) | (0 << 12) | (1 << 13) | (0 << 14);
-    sprite->attribute1 = x | (0 << 9) | (0 << 12) | (0 << 13) | (2 << 14); 
-    sprite->attribute2 = 32 | (0 << 10) | (0 << 12);
-
-    int randomOffset = rand() % SCREEN_WIDTH;
-    sprite_position(sprite, randomOffset, y);
+void random_position(struct Sprite* sprite) {
+    int randomX = rand() % (SCREEN_WIDTH - 32);
+    int randomY = rand() % SCREEN_HEIGHT;
+    sprite_position(sprite, randomX, randomY);
 }
+
+void restart_fall(struct Sprite* sprite) {
+    int randomX = rand() % (SCREEN_WIDTH - 32);
+    sprite_position(sprite, randomX, 0);
+}
+
+
 
 //score by hearts (lives)!
 #define NUM_LIVES 5
@@ -399,7 +452,7 @@ struct Sprite *lives[NUM_LIVES];
 
 void lives_init() {
     for (int i=0; i < NUM_LIVES; i++) {
-        lives[i] = sprite_init(i * 32, 0, SIZE_32_32, 32*3, 0);
+        lives[i] = sprite_init(i * 32, 0, SIZE_32_32, 0, 0, 32*3, 0);
     }
 }
 
@@ -412,6 +465,17 @@ int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
     return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
 }
 
+void sprite_collide2(struct Bowl* bowl, struct Sprite* sprite2) {
+    int y2 = sprite2->attribute0 & 0xff;
+    int x2 = sprite2->attribute1 & 0x1ff;
+    int bx = bowl->x;
+    
+    for(int i = 0; i<40; i++){
+        if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
+        sprite_position(sprite2, 32, -100);
+        }
+    }
+}
 
 void gg(struct Sprite* life) {
     life->attribute0 = SCREEN_HEIGHT;
@@ -439,7 +503,7 @@ void handle_collisions(struct Bowl* bowl) {
         if (sprite_collide(lives[i], bowl->sprite)) {
             decrease_score();
             gg(lives[i]);
-            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 32*3, 0);
+            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 0, 0, 32*3, 0);
         }
     }
 }
@@ -474,7 +538,7 @@ void gg_input() {
     lives_init();
     }
 }
-
+ 
 /* the main function */
 int main() {
     /* we set the mode to mode 0 with bg0 on */
@@ -491,23 +555,44 @@ int main() {
 
     struct Bowl playerBowl;
     bowl_init(&playerBowl);
-    lives_init();
 
-    struct Sprite *grape = sprite_init(32, 0, SIZE_32_32, 32, 0);
-    struct Sprite *apple = sprite_init(64, 0, SIZE_32_32, 64, 0);
-    struct Sprite *bananas = sprite_init(128, 0, SIZE_32_32, 128, 0);
-    struct Sprite *mushroom = sprite_init(160, 0, SIZE_32_32, 160, 0);
+    struct Sprite *grape = sprite_init(32, 0, SIZE_32_32, 0, 0, 32, 0);
+    random_position(grape);
+    struct Sprite *apple = sprite_init(64, 0, SIZE_32_32, 0, 0, 64, 0);
+    random_position(apple);
+    struct Sprite *bananas = sprite_init(128, 0, SIZE_32_32, 0, 0, 128, 0);
+    random_position(bananas);
+    struct Sprite *mushroom = sprite_init(160, 0, SIZE_32_32, 0, 0, 160, 0);
+    random_position(mushroom);
     /* set initial scroll to 0 */
     int xscroll = 0;
-
+    
+    int timer = 0;
     /* loop forever */
     while (1) {
-        int dx = 0;
         int dy = 1;
-        sprite_move(grape, dx, dy);
-        sprite_move(apple, dx, dy);
-        sprite_move(bananas, dx, dy);  
-        sprite_move(mushroom,dx,dy);        
+        sprite_move(grape, 0, dy);
+        sprite_move(apple, 0, dy);
+        sprite_move(bananas, 0, dy);
+        sprite_move(mushroom, 0, dy);
+
+        if ((grape->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(grape);
+        }
+        if ((apple->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(apple);
+        }
+        if ((bananas->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(bananas);
+        }
+        if ((mushroom->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(mushroom);
+        }
+        
+        sprite_collide2(&playerBowl, grape);
+        sprite_collide2(&playerBowl, apple);
+        sprite_collide2(&playerBowl, bananas);
+        sprite_collide2(&playerBowl, mushroom); 
 
         bowl_update(&playerBowl);
 
@@ -523,6 +608,8 @@ int main() {
         } else {
             bowl_stop(&playerBowl);
         }
+
+       
 
         /* wait for vblank before scrolling and moving sprites */
         wait_vblank();

@@ -8,7 +8,8 @@
 
 /* include these files */
 #include "map.h"
-#include "bg.h"
+#include "test.h"
+#include "map2.h"
 #include "objects.h"
 #include <stdlib.h>
 #include <time.h>
@@ -22,7 +23,7 @@
 
 //control registers for tile layers
 volatile unsigned short* bg0_control = (volatile unsigned short*) 0x4000008;
-volatile unsigned short* bg1_control = (volatile     unsigned short*) 0x400000a;
+volatile unsigned short* bg1_control = (volatile unsigned short*) 0x400000a;
 
 /* flags to set sprite handling in display control register */
 #define SPRITE_MAP_2D 0x0
@@ -50,7 +51,7 @@ volatile unsigned short* sprite_attribute_memory = (volatile unsigned short*) 0x
 volatile unsigned short* sprite_image_memory = (volatile unsigned short*) 0x6010000;
 
 /* the address of the color palettes used for backgrounds and sprites */
-volatile unsigned short* background_palette = (volatile unsigned short*) 0x5000000;
+volatile unsigned short* bg_palette = (volatile unsigned short*) 0x5000000;
 volatile unsigned short* sprite_palette = (volatile unsigned short*) 0x5000200;
 int next_palette_index = 0;
 
@@ -136,12 +137,12 @@ void memcpy16_dma(unsigned short* dest, unsigned short* source, int amount) {
 void setup_background() {
 
     /* load the palette from the image into palette memory*/
-    memcpy16_dma((unsigned short*) background_palette, (unsigned short*) 
-bg_palette, PALETTE_SIZE);
+    memcpy16_dma((unsigned short*) bg_palette, (unsigned short*) 
+test_palette, PALETTE_SIZE);
 
     /* load the image into char block 0 */
-    memcpy16_dma((unsigned short*) char_block(0), (unsigned short*) bg_data,
-            (bg_width * bg_height) / 2);
+    memcpy16_dma((unsigned short*) char_block(0), (unsigned short*) test_data,
+            (test_width * test_height) / 2);
 
     /* set all control the bits in this register */
     *bg0_control = 0 |    /* priority, 0 is highest, 3 is lowest */
@@ -156,6 +157,28 @@ bg_palette, PALETTE_SIZE);
     memcpy16_dma((unsigned short*) screen_block(16), (unsigned short*) map, map_width * map_height);
 }
 
+void setup_overlay() {
+     /* load the palette from the image into palette memory*/
+     memcpy16_dma((unsigned short*) bg_palette, (unsigned short*) test_palette, PALETTE_SIZE);
+
+    /* load the image into char block 0 */
+     memcpy16_dma((unsigned short*) char_block(0), (unsigned short*) test_data,
+             (test_width * test_height) / 2);
+
+     /* set all control the bits in this register */
+     *bg1_control = 1 |    /* priority, 0 is highest, 3 is lowest */
+         (0 << 2)  |       /* the char block the image data is stored in */
+         (0 << 6)  |       /* the mosaic flag */
+         (1 << 7)  |       /* color mode, 0 is 16 colors, 1 is 256 colors */
+         (17 << 8) |       /* the screen block the tile data is stored in */
+        (1 << 13) |       /* wrapping flag */
+         (0 << 14);        /* bg size, 0 is 256x256 */
+
+     /* load the tile data into screen block 16 */
+     memcpy16_dma((unsigned short*) screen_block(17), (unsigned short*) map2, map2_width * map2_height);
+}
+
+
 /* just kill time */
 void delay(unsigned int amount) {
     for (int i = 0; i < amount * 10; i++);
@@ -167,7 +190,7 @@ void delay(unsigned int amount) {
      color += r;
 
      /* add the color to the palette */
-     background_palette[next_palette_index] = color;
+     bg_palette[next_palette_index] = color;
 
      /* increment the index */
      next_palette_index++;
@@ -175,7 +198,6 @@ void delay(unsigned int amount) {
      /* return index of color just added */
      return next_palette_index - 1;
 }
-
 
 /* a sprite is a moveable image on the screen */
 struct Sprite {
@@ -273,7 +295,27 @@ void sprite_clear() {
         sprites[i].attribute1 = SCREEN_WIDTH;
     }
 }
+/* change the vertical flip flag */
+void sprite_set_vertical_flip(struct Sprite* sprite, int vertical_flip) {
+    if (vertical_flip) {
+        /* set the bit */
+        sprite->attribute1 |= 0x2000;
+    } else {
+        /* clear the bit */
+        sprite->attribute1 &= 0xdfff;
+    }
+}
 
+/* change the vertical flip flag */
+void sprite_set_horizontal_flip(struct Sprite* sprite, int horizontal_flip) {
+    if (horizontal_flip) {
+        /* set the bit */
+        sprite->attribute1 |= 0x1000;
+    } else {
+        /* clear the bit */
+        sprite->attribute1 &= 0xefff;
+    }
+}
 /* set a sprite postion */
 void sprite_position(struct Sprite* sprite, int x, int y) {
     /* clear out the y coordinate */
@@ -299,28 +341,6 @@ void sprite_move(struct Sprite* sprite, int dx, int dy) {
 
     /* move to the new location */
     sprite_position(sprite, x + dx, y + dy);
-}
-
-/* change the vertical flip flag */
-void sprite_set_vertical_flip(struct Sprite* sprite, int vertical_flip) {
-    if (vertical_flip) {
-        /* set the bit */
-        sprite->attribute1 |= 0x2000;
-    } else {
-        /* clear the bit */
-        sprite->attribute1 &= 0xdfff;
-    }
-}
-
-/* change the vertical flip flag */
-void sprite_set_horizontal_flip(struct Sprite* sprite, int horizontal_flip) {
-    if (horizontal_flip) {
-        /* set the bit */
-        sprite->attribute1 |= 0x1000;
-    } else {
-        /* clear the bit */
-        sprite->attribute1 &= 0xefff;
-    }
 }
 
 /* change the tile offset of a sprite */
@@ -411,7 +431,7 @@ int bowl_right(struct Bowl* bowl) {
 
 void bowl_stop(struct Bowl* bowl) {
     bowl->move = 0;
-    bowl->frame = 0;
+   bowl->frame = 0;
     bowl->counter = 7;
     //sprite_set_offset(bowl->sprite, bowl->frame);
 }
@@ -445,7 +465,6 @@ void restart_fall(struct Sprite* sprite) {
 }
 
 
-
 //score by hearts (lives)!
 #define NUM_LIVES 5
 struct Sprite *lives[NUM_LIVES];
@@ -456,26 +475,49 @@ void lives_init() {
     }
 }
 
-void sprite_collide(struct Bowl* bowl, struct Sprite* sprite) {
-    int y2 = sprite->attribute0 & 0xff;
-    int x2 = sprite->attribute1 & 0x1ff;
+int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
+    int x1 = sprite1->attribute1 & 0x1FF;
+    int y1 = sprite1->attribute0 & 0xFF;
+    int x2 = sprite2->attribute1 & 0x1FF;
+    int y2 = sprite2->attribute0 & 0xFF;
+
+    return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
+}
+
+void fruit_collide(struct Bowl* bowl, struct Sprite* sprite2) {
+    int y2 = sprite2->attribute0 & 0xff;
+    int x2 = sprite2->attribute1 & 0x1ff;
     int bx = bowl->x;
     
     for(int i = 0; i<40; i++){
         if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
-        sprite_position(sprite, 32, -100);
+            sprite_position(sprite2, 32, -100);
         }
     }
-}
-
-void gg(struct Sprite* life) {
-    life->attribute0 = SCREEN_HEIGHT;
-    life->attribute1 = SCREEN_WIDTH;
 }
 
 int score = 5;
 int total_lives = NUM_LIVES;
 int game_over =0;
+
+void gg(struct Sprite* life) {
+     life->attribute0 = SCREEN_HEIGHT;
+     life->attribute1 = SCREEN_WIDTH;
+}
+
+void mush_collide(struct Bowl* bowl, struct Sprite* mush) {
+     int y2 = mush->attribute0 & 0xff;
+     int x2 = mush->attribute1 & 0x1ff;
+     int bx = bowl->x;
+
+     for(int i = 0; i<40; i++){
+         if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
+             sprite_position(mush, 32, -100);
+             gg(lives[score - 1]);
+             score --;
+         }
+     }
+}
 
 void decrease_score() {
     score--;
@@ -488,7 +530,7 @@ void decrease_score() {
         }
     }
 }
-/*
+
 void handle_collisions(struct Bowl* bowl) {
     for (int i=0; i < NUM_LIVES; i++) {
         if (sprite_collide(lives[i], bowl->sprite)) {
@@ -498,7 +540,7 @@ void handle_collisions(struct Bowl* bowl) {
         }
     }
 }
-*/
+
 enum Gamestate {
     INTRO,
     GAME,
@@ -529,14 +571,17 @@ void gg_input() {
     lives_init();
     }
 }
+
+int assembly1(int n);
  
 /* the main function */
 int main() {
     /* we set the mode to mode 0 with bg0 on */
-    *display_control = MODE0 | BG0_ENABLE | SPRITE_ENABLE | SPRITE_MAP_1D;
+    *display_control = MODE0 | BG0_ENABLE | BG1_ENABLE | SPRITE_ENABLE | SPRITE_MAP_1D;
 
     /* setup the background 0 */
     setup_background();
+    setup_overlay();
 
     /* setup the sprite image data */
     setup_sprite_image();
@@ -560,8 +605,11 @@ int main() {
     int xscroll = 0;
     
     int timer = 0;
+    int mush_count = 0;
+   
     /* loop forever */
     while (1) {
+
         int dy = 1;
         sprite_move(grape, 0, dy);
         sprite_move(apple, 0, dy);
@@ -581,10 +629,27 @@ int main() {
             restart_fall(mushroom);
         }
         
-        sprite_collide(&playerBowl, grape);
-        sprite_collide(&playerBowl, apple);
-        sprite_collide(&playerBowl, bananas);
-        sprite_collide(&playerBowl, mushroom); 
+        fruit_collide(&playerBowl, grape);
+
+        fruit_collide(&playerBowl, apple);
+
+        fruit_collide(&playerBowl, bananas);
+
+        mush_collide(&playerBowl, mushroom);
+
+        int mush_x = mushroom->attribute1 & 0x1ff;
+        if(mush_x==32) {
+           mush_count++;
+        }
+
+        int mush_limit = assembly1(mush_count);      
+        if(mush_limit) {
+        sprite_position(grape, -50, 0);
+        sprite_position(apple, -50, 0);
+        sprite_position(bananas, -50, 0);
+        sprite_position(mushroom, -50, 0); 
+        }
+        
 
         bowl_update(&playerBowl);
 

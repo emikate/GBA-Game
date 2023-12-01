@@ -176,7 +176,6 @@ void delay(unsigned int amount) {
      return next_palette_index - 1;
 }
 
-
 /* a sprite is a moveable image on the screen */
 struct Sprite {
     unsigned short attribute0;
@@ -465,17 +464,29 @@ int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
     return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
 }
 
-void sprite_collide2(struct Bowl* bowl, struct Sprite* sprite2) {
+void fruit_collide(struct Bowl* bowl, struct Sprite* sprite2) {
     int y2 = sprite2->attribute0 & 0xff;
     int x2 = sprite2->attribute1 & 0x1ff;
     int bx = bowl->x;
     
     for(int i = 0; i<40; i++){
         if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
-        sprite_position(sprite2, 32, -100);
+            sprite_position(sprite2, 32, -100);
         }
     }
 }
+void mush_collide(struct Bowl* bowl, struct Sprite* mush) {
+     int y2 = mush->attribute0 & 0xff;
+     int x2 = mush->attribute1 & 0x1ff;
+     int bx = bowl->x;
+
+     for(int i = 0; i<40; i++){
+         if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
+             sprite_position(mush, 32, -100);
+         }
+     }
+}
+
 
 void gg(struct Sprite* life) {
     life->attribute0 = SCREEN_HEIGHT;
@@ -538,6 +549,8 @@ void gg_input() {
     lives_init();
     }
 }
+
+int assembly1(int n);
  
 /* the main function */
 int main() {
@@ -568,8 +581,11 @@ int main() {
     int xscroll = 0;
     
     int timer = 0;
+    int mush_count = 0;
+   
     /* loop forever */
     while (1) {
+
         int dy = 1;
         sprite_move(grape, 0, dy);
         sprite_move(apple, 0, dy);
@@ -589,10 +605,27 @@ int main() {
             restart_fall(mushroom);
         }
         
-        sprite_collide2(&playerBowl, grape);
-        sprite_collide2(&playerBowl, apple);
-        sprite_collide2(&playerBowl, bananas);
-        sprite_collide2(&playerBowl, mushroom); 
+        fruit_collide(&playerBowl, grape);
+
+        fruit_collide(&playerBowl, apple);
+
+        fruit_collide(&playerBowl, bananas);
+
+        mush_collide(&playerBowl, mushroom);
+
+        int mush_x = mushroom->attribute1 & 0x1ff;
+        if(mush_x==32) {
+           mush_count++;
+        }
+
+        int mush_limit = assembly1(mush_count);      
+        if(mush_limit) {
+        sprite_position(grape, -50, 0);
+        sprite_position(apple, -50, 0);
+        sprite_position(bananas, -50, 0);
+        sprite_position(mushroom, -50, 0); 
+        }
+        
 
         bowl_update(&playerBowl);
 

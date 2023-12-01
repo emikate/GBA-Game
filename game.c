@@ -1,4 +1,3 @@
-
 /*
  * game.c
  * simple catcher game for the GBA
@@ -12,6 +11,7 @@
 #include "bg.h"
 #include "objects.h"
 #include <stdlib.h>
+#include <time.h>
 
 /* the tile mode flags needed for display control register */
 #define MODE0 0x00
@@ -37,8 +37,6 @@ volatile unsigned short* bg1_control = (volatile     unsigned short*) 0x400000a;
 
 /* the display control pointer points to the gba graphics register */
 volatile unsigned long* display_control = (volatile unsigned long*) 0x4000000;
-
-#define SHOW_BACK 64
 
 /*  pointer points to 16-bit colors of which there are 240x160 */
  volatile unsigned short* screen = (volatile unsigned short*) 0x6000000;
@@ -435,98 +433,17 @@ void bowl_update(struct Bowl* bowl) {
     sprite_position(bowl->sprite, bowl->x, bowl->y);
 }
 
-//call before move function to initialize sprites to fall more randomly
-void falling_sprites(struct Sprite *sprite, int x, int y) {
-    sprite->attribute0 = y | (0 << 8) | (0 << 10) | (0 << 12) | (1 << 13) | (0 << 14);
-    sprite->attribute1 = x | (0 << 9) | (0 << 12) | (0 << 13) | (2 << 14); 
-    sprite->attribute2 = 32 | (0 << 10) | (0 << 12);
-
-    int randomOffset = rand() % SCREEN_WIDTH;
-    sprite_position(sprite, randomOffset, y);
+void random_position(struct Sprite* sprite) {
+    int randomX = rand() % (SCREEN_WIDTH - 32);
+    int randomY = rand() % SCREEN_HEIGHT;
+    sprite_position(sprite, randomX, randomY);
 }
 
-//score by hearts (lives)!
-#define NUM_LIVES 5
-struct Sprite *lives[NUM_LIVES];
-
-void lives_init() {
-    for (int i=0; i < NUM_LIVES; i++) {
-        lives[i] = sprite_init(i * 32, 0, SIZE_32_32, 0, 0, 32*3, 0);
-    }
+void restart_fall(struct Sprite* sprite) {
+    int randomX = rand() % (SCREEN_WIDTH - 32);
+    sprite_position(sprite, randomX, 0);
 }
-
-int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
-    int x1 = sprite1->attribute1 & 0x1FF;
-    int y1 = sprite1->attribute0 & 0xFF;
-    int x2 = sprite2->attribute1 & 0x1FF;
-    int y2 = sprite2->attribute0 & 0xFF;
-
-    return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
-}
-
-
-void gg(struct Sprite* life) {
-    life->attribute0 = SCREEN_HEIGHT;
-    life->attribute1 = SCREEN_WIDTH;
-}
-
-int score = 5;
-int total_lives = NUM_LIVES;
-int game_over =0;
-
-void decrease_score() {
-    score--;
-    if (score <= 0) {
-        total_lives--;    
-        if (total_lives <= 0) {
-            game_over = 1;
-        } else { 
-            score = 5;
-        }
-    }
-}
-
-void handle_collisions(struct Bowl* bowl) {
-    for (int i=0; i < NUM_LIVES; i++) {
-        if (sprite_collide(lives[i], bowl->sprite)) {
-            decrease_score();
-            gg(lives[i]);
-            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 0, 0, 32*3, 0);
-        }
-    }
-}
-
-enum Gamestate {
-    INTRO,
-    GAME,
-    GAME_OVER 
-};
-
-enum Gamestate gameState = INTRO;
-
-//require graphics/draw text functions -if time permits
-void intro_screen() {
-}
-
-void over_screen() {
-}
-
-void intro_input() {
-    if (button_pressed(BUTTON_START)) {
-        gameState = GAME;
-    }
-}
-void gg_input() {
-    if (button_pressed(BUTTON_START)) {
-    gameState = INTRO;
-    score = 5;
-    total_lives = NUM_LIVES;
-    game_over = 0;
-    bowl_init(&playerBowl);
-    lives_init();
-    }
-}
-
+ 
 /* the main function */
 int main() {
     /* we set the mode to mode 0 with bg0 on */
@@ -543,23 +460,43 @@ int main() {
 
     struct Bowl playerBowl;
     bowl_init(&playerBowl);
-    lives_init();
 
     struct Sprite *grape = sprite_init(32, 0, SIZE_32_32, 0, 0, 32, 0);
+    random_position(grape);
     struct Sprite *apple = sprite_init(64, 0, SIZE_32_32, 0, 0, 64, 0);
+    random_position(apple);
     struct Sprite *bananas = sprite_init(128, 0, SIZE_32_32, 0, 0, 128, 0);
+    random_position(bananas);
     struct Sprite *mushroom = sprite_init(160, 0, SIZE_32_32, 0, 0, 160, 0);
+    random_position(mushroom);
     /* set initial scroll to 0 */
     int xscroll = 0;
-
+    
+    int timer = 0;
     /* loop forever */
     while (1) {
-        int dx = 0;
         int dy = 1;
-        sprite_move(grape, dx, dy);
-        sprite_move(apple, dx, dy);
-        sprite_move(bananas, dx, dy);  
-        sprite_move(mushroom,dx,dy);        
+        sprite_move(grape, 0, dy);
+        sprite_move(apple, 0, dy);
+        sprite_move(bananas, 0, dy);
+        sprite_move(mushroom, 0, dy);
+
+        if ((grape->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(grape);
+        }
+        if ((apple->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(apple);
+        }
+        if ((bananas->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(bananas);
+        }
+        if ((mushroom->attribute0 & 0xff) >= SCREEN_HEIGHT) {
+            restart_fall(mushroom);
+        }
+        
+
+
+
 
         bowl_update(&playerBowl);
 
@@ -575,6 +512,8 @@ int main() {
         } else {
             bowl_stop(&playerBowl);
         }
+
+       
 
         /* wait for vblank before scrolling and moving sprites */
         wait_vblank();

@@ -443,6 +443,90 @@ void restart_fall(struct Sprite* sprite) {
     int randomX = rand() % (SCREEN_WIDTH - 32);
     sprite_position(sprite, randomX, 0);
 }
+
+
+
+//score by hearts (lives)!
+#define NUM_LIVES 5
+struct Sprite *lives[NUM_LIVES];
+
+void lives_init() {
+    for (int i=0; i < NUM_LIVES; i++) {
+        lives[i] = sprite_init(i * 32, 0, SIZE_32_32, 0, 0, 32*3, 0);
+    }
+}
+
+int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
+    int x1 = sprite1->attribute1 & 0x1FF;
+    int y1 = sprite1->attribute0 & 0xFF;
+    int x2 = sprite2->attribute1 & 0x1FF;
+    int y2 = sprite2->attribute0 & 0xFF;
+
+    return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
+}
+
+
+void gg(struct Sprite* life) {
+    life->attribute0 = SCREEN_HEIGHT;
+    life->attribute1 = SCREEN_WIDTH;
+}
+
+int score = 5;
+int total_lives = NUM_LIVES;
+int game_over =0;
+
+void decrease_score() {
+    score--;
+    if (score <= 0) {
+        total_lives--;    
+        if (total_lives <= 0) {
+            game_over = 1;
+        } else { 
+            score = 5;
+        }
+    }
+}
+
+void handle_collisions(struct Bowl* bowl) {
+    for (int i=0; i < NUM_LIVES; i++) {
+        if (sprite_collide(lives[i], bowl->sprite)) {
+            decrease_score();
+            gg(lives[i]);
+            lives[i] = sprite_init(i*32, 0, SIZE_32_32, 0, 0, 32*3, 0);
+        }
+    }
+}
+
+enum Gamestate {
+    INTRO,
+    GAME,
+    GAME_OVER 
+};
+
+enum Gamestate gameState = INTRO;
+
+//require graphics/draw text functions -if time permits
+void intro_screen() {
+}
+
+void over_screen() {
+}
+
+void intro_input() {
+    if (button_pressed(BUTTON_START)) {
+        gameState = GAME;
+    }
+}
+void gg_input() {
+    if (button_pressed(BUTTON_START)) {
+    gameState = INTRO;
+    score = 5;
+    total_lives = NUM_LIVES;
+    game_over = 0;
+    bowl_init(&playerBowl);
+    lives_init();
+    }
+}
  
 /* the main function */
 int main() {

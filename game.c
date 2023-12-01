@@ -456,15 +456,17 @@ void lives_init() {
     }
 }
 
-int sprite_collide(struct Sprite* sprite1, struct Sprite* sprite2) {
-    int x1 = sprite1->attribute1 & 0x1FF;
-    int y1 = sprite1->attribute0 & 0xFF;
-    int x2 = sprite2->attribute1 & 0x1FF;
-    int y2 = sprite2->attribute0 & 0xFF;
-
-    return (x1 < x2 + 32) && (x1 + 32 > x2) && (y1 < y2 +32) && (y1 + 32 > y2);
+void sprite_collide(struct Bowl* bowl, struct Sprite* sprite) {
+    int y2 = sprite->attribute0 & 0xff;
+    int x2 = sprite->attribute1 & 0x1ff;
+    int bx = bowl->x;
+    
+    for(int i = 0; i<40; i++){
+        if(((113 == y2)&&(bx == x2+i))||((113 == y2)&&(bx+i == x2))) {
+        sprite_position(sprite, 32, -100);
+        }
+    }
 }
-
 
 void gg(struct Sprite* life) {
     life->attribute0 = SCREEN_HEIGHT;
@@ -486,7 +488,7 @@ void decrease_score() {
         }
     }
 }
-
+/*
 void handle_collisions(struct Bowl* bowl) {
     for (int i=0; i < NUM_LIVES; i++) {
         if (sprite_collide(lives[i], bowl->sprite)) {
@@ -496,7 +498,7 @@ void handle_collisions(struct Bowl* bowl) {
         }
     }
 }
-
+*/
 enum Gamestate {
     INTRO,
     GAME,
@@ -544,6 +546,7 @@ int main() {
 
     struct Bowl playerBowl;
     bowl_init(&playerBowl);
+    lives_init();
 
     struct Sprite *grape = sprite_init(32, 0, SIZE_32_32, 0, 0, 32, 0);
     random_position(grape);
@@ -578,9 +581,10 @@ int main() {
             restart_fall(mushroom);
         }
         
-
-
-
+        sprite_collide(&playerBowl, grape);
+        sprite_collide(&playerBowl, apple);
+        sprite_collide(&playerBowl, bananas);
+        sprite_collide(&playerBowl, mushroom); 
 
         bowl_update(&playerBowl);
 
